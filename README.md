@@ -55,6 +55,12 @@ Other MCP clients (Claude Desktop, Cursor, …):
 - Lineup columns follow the handball layout (`goals`, `suspensions`). For other sports, like basketball, they can be shifted. The `events` log is reliable.
 - `timeoutsUsed` can disagree with the timeouts in `events`.
 
+## Security
+
+- Read-only. No login, no credentials, nothing written to disk. Requests are restricted to `https://www.profixio.com`, also after redirects.
+- Tool output is scraped public content (team names, player names, comments). Treat it as untrusted data, not as instructions, like any web content you give an LLM.
+- Report vulnerabilities privately, see [SECURITY.md](SECURITY.md).
+
 ## Be nice to Profixio
 
 Every tool call makes one or a few requests to profixio.com. Don't loop it or use it for bulk scraping.

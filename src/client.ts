@@ -3,7 +3,15 @@
 // some of them lazy-loaded. We fetch the page, then replay Livewire calls over HTTP.
 
 export const BASE = "https://www.profixio.com/app";
+const ORIGIN = new URL(BASE).origin;
 const UA = "Mozilla/5.0 (profixio-mcp; read-only)";
+const TIMEOUT_MS = 20_000;
+
+/** Only ever talk to Profixio, even if a page or redirect points somewhere else. */
+function assertProfixio(url: string): string {
+  if (new URL(url, ORIGIN).origin !== ORIGIN) throw new Error(`Refusing non-Profixio URL: ${url}`);
+  return new URL(url, ORIGIN).href;
+}
 
 export interface Page {
   url: string;
@@ -43,12 +51,16 @@ function mergeCookies(existing: string, res: Response): string {
 }
 
 export async function getPage(pathOrUrl: string): Promise<Page> {
-  const url = pathOrUrl.startsWith("http") ? pathOrUrl : `${BASE}/${pathOrUrl.replace(/^\//, "")}`;
-  const res = await fetch(url, { headers: { "User-Agent": UA, "Accept-Language": "sv,en" } });
+  const url = assertProfixio(pathOrUrl.startsWith("http") ? pathOrUrl : `${BASE}/${pathOrUrl.replace(/^\//, "")}`);
+  const res = await fetch(url, {
+    headers: { "User-Agent": UA, "Accept-Language": "sv,en" },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
   if (!res.ok) throw new Error(`Profixio returned HTTP ${res.status} for ${url}`);
+  assertProfixio(res.url);
   const html = await res.text();
   const csrf = html.match(/name="csrf-token" content="([^"]+)"/)?.[1] ?? "";
-  const updateUri = html.match(/data-update-uri="([^"]+)"/)?.[1] ?? `${BASE}/livewire/update`;
+  const updateUri = assertProfixio(html.match(/data-update-uri="([^"]+)"/)?.[1] ?? `${BASE}/livewire/update`);
   return { url: res.url, html, csrf, updateUri, cookies: mergeCookies("", res) };
 }
 
@@ -99,6 +111,8 @@ export async function livewire(
       Cookie: page.cookies,
     },
     body: JSON.stringify(body),
+    redirect: "error",
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`Livewire update failed: HTTP ${res.status}`);
   const json = (await res.json()) as { components: { snapshot: string; effects: { html?: string } }[] };

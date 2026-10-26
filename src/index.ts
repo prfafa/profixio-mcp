@@ -10,7 +10,15 @@ const server = new McpServer({ name: "profixio", version: "0.1.0" });
 const ok = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 
 /** Accept "leagueid27971", a full competition URL, or a team URL. */
-const competitionSlug = (s: string) => s.match(/competition\/([a-zA-Z0-9]+)/)?.[1] ?? s.match(/app\/([a-zA-Z0-9]+)\/teams/)?.[1] ?? s.trim();
+const competitionSlug = (s: string) => {
+  const slug = s.match(/competition\/([a-zA-Z0-9]+)/)?.[1] ?? s.match(/app\/([a-zA-Z0-9]+)\/teams/)?.[1] ?? s.trim();
+  if (!/^[a-zA-Z0-9]+$/.test(slug)) throw new Error(`Invalid competition: ${s}`);
+  return slug;
+};
+
+// Inputs end up in URL paths, so keep them to plain ids.
+const federationCode = z.string().regex(/^[A-Za-z]+$/).describe("Federation code, e.g. SHF");
+const numericId = z.string().regex(/^\d+$/);
 
 const matchFilter = z
   .enum(["upcoming", "played", "all"])
@@ -35,7 +43,7 @@ server.registerTool(
   {
     title: "List districts",
     description: "List the districts/regions of a federation, e.g. SHF → HF Öst, HF Väst.",
-    inputSchema: { federation: z.string().describe("Federation code, e.g. SHF") },
+    inputSchema: { federation: federationCode },
   },
   async ({ federation }) => {
     const page = await getPage(`lx/${federation}`);
@@ -50,8 +58,8 @@ server.registerTool(
     description:
       "List the competitions (series/leagues) for the current season, either federation-wide (national series) or in one district. Returns slugs used by the other tools.",
     inputSchema: {
-      federation: z.string().describe("Federation code, e.g. SHF"),
-      districtId: z.string().optional().describe("District id from list_districts; omit for federation-level competitions"),
+      federation: federationCode,
+      districtId: numericId.optional().describe("District id from list_districts; omit for federation-level competitions"),
       search: z.string().optional().describe("Case-insensitive filter on competition name, e.g. 'P19'"),
     },
   },
@@ -109,7 +117,7 @@ server.registerTool(
     description: "All matches for one team in a competition. Use search_teams or get_competition_matches to find the teamId.",
     inputSchema: {
       competition: z.string().describe("Competition slug (e.g. leagueid27971) or URL"),
-      teamId: z.string(),
+      teamId: numericId,
       filter: matchFilter,
     },
   },
@@ -139,8 +147,8 @@ server.registerTool(
     title: "Matches on a date",
     description: "All matches in a district on a given day.",
     inputSchema: {
-      federation: z.string().describe("Federation code, e.g. SHF"),
-      districtId: z.string(),
+      federation: federationCode,
+      districtId: numericId,
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD"),
     },
   },
